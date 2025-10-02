@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VisitHome • Rapport (PWA local‑first)</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{ --peche:#FFEDE6; --framboise:#DD183B; --gris:#4b5563; --noir:#111; }
+    html,body{margin:0;background:#fafafa;color:var(--noir);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif}
+    .container{max-width:980px;margin:24px auto;padding:0 16px}
+    .card{background:#fff;border:1px solid #eee;border-radius:18px;box-shadow:0 6px 20px rgba(0,0,0,.06)}
+    .titlebar{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:linear-gradient(180deg,#fff 0,#fff 65%,#fff0 100%),var(--peche)}
+    .titlebar h1{margin:0;font-size:22px}
+    .badge{display:inline-block;background:var(--peche);color:#8a0f22;border:1px dashed #f4c4bc;padding:6px 10px;border-radius:999px;font-size:12px}
+    .section{padding:20px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+    label{font-size:13px;color:var(--gris);display:block;margin:8px 0 6px}
+    input[type=text],input[type=number],textarea{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:12px;background:#fff}
+    textarea{min-height:92px;resize:vertical}
+    input[type=file]{margin-top:6px}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;background:#fff;cursor:pointer}
+    .btn.primary{background:var(--framboise);color:#fff;border-color:var(--framboise)}
+    .btn.warn{background:#fff3f3;color:#8a0f22;border-color:#ffd6d6}
+    .map-note{background:var(--peche);border:1px dashed #f3c3bc;padding:10px;border-radius:12px;margin-top:6px}
+    .hr{height:1px;background:#eee;margin:12px 0}
+    .logo-preview{height:48px;aspect-ratio:1/1;border-radius:10px;border:1px solid #eee;display:grid;place-items:center;background:#fff;overflow:hidden}
+    .logo-preview img{max-height:100%;max-width:100%}
+    .footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+    .room{border:1px dashed #e5e7eb;padding:14px;border-radius:14px;margin-top:12px;background:#fff}
+    .muted{color:#6b7280}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #eee;border-radius:999px;background:#fff}
+    .toc{font-size:13px;color:#374151;background:#fff;border:1px solid #eee;border-radius:12px;padding:10px}
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+  <div class="container card">
+    <div class="titlebar">
+      <h1>VisitHome — Générateur de Rapport (PWA, offline)</h1>
+      <span class="badge">Local‑first • Hors‑ligne • Données privées</span>
+    </div>
+    <div class="section">
+      <div class="row">
+        <div>
+          <label>Logo (PNG/JPG)</label>
+          <div class="pill">
+            <input type="file" id="logo" accept="image/*" />
+            <div class="logo-preview" id="logoPreview">Logo</div>
+          </div>
+        </div>
+        <div>
+          <label>Titre du rapport</label>
+          <input id="titre" type="text" placeholder="Ex. T3 Toulouse — Avenue de la Garonne" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Adresse du bien</label>
+          <input id="adresse" type="text" placeholder="N°, Rue, Ville" />
+        </div>
+        <div class="row-3">
+          <div>
+            <label>Surface (m²)</label>
+            <input id="surface" type="number" step="0.1" placeholder="65" />
+          </div>
+          <div>
+            <label>Prix (€)</label>
+            <input id="prix" type="number" step="1" placeholder="89000" />
+          </div>
+          <div>
+            <label>Date de visite</label>
+            <input id="dateVisite" type="text" placeholder="jj/mm/aaaa" />
+          </div>
+        </div>
+      </div>
+
+      <div class="map-note"><strong>Plan / situation :</strong> le PDF inclut un QR Google Maps. Option carte image possible plus tard (clé API gratuite).</div>
+
+      <label style="margin-top:14px">Descriptif général</label>
+      <textarea id="descGeneral" placeholder="État général, atouts, points de vigilance, environnement…"></textarea>
+
+      <div class="hr"></div>
+      <h2>Pièces & photos</h2>
+      <div id="rooms"></div>
+      <button class="btn" id="addRoomBtn">+ Ajouter une pièce</button>
+
+      <div class="footer">
+        <button class="btn" id="installBtn" title="Installer l'application">📲 Installer</button>
+        <button class="btn" id="saveDraftBtn">💾 Sauvegarder</button>
+        <button class="btn" id="loadDraftBtn">📂 Charger</button>
+        <button class="btn warn" id="clearBtn">🧹 Vider (appareil)</button>
+        <button class="btn primary" id="generateBtn">📄 Générer le PDF</button>
+      </div>
+
+      <div class="hr"></div>
+      <div class="toc" id="tocHint">Sommaire : il sera généré automatiquement dans le PDF.</div>
+    </div>
+  </div>
+
+  <div id="toast" style="position:fixed;right:16px;bottom:16px;background:#111;color:#fff;padding:10px 14px;border-radius:10px;opacity:0;transition:all .25s"></div>
+
+<script>
+/* =================== PWA (manifeste + service worker) =================== */
+(function setupPWA(){
+  // manifest (données VisitHome)
+  const manifest = {
+    name: "VisitHome — Générateur de Rapport",
+    short_name: "VisitHomeRapport",
+    description: "App locale pour créer des rapports PDF de visite (offline)",
+    display: "standalone",
+    start_url: ".",
+    background_color: "#FFEDE6",
+    theme_color: "#DD183B",
+    icons: [
+      { src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%23FFEDE6'/><path d='M16 48 48 22 80 48v26H54V56H42v18H16z' fill='%23DD183B'/></svg>", sizes: "96x96", type:"image/svg+xml", purpose:"any" }
+    ]
+  };
+  const manifestHref = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'}));
+  const link = document.createElement('link'); link.rel='manifest'; link.href=manifestHref; document.head.appendChild(link);
+
+  // service worker (cache app shell)
+  const swCode = `
+    const CACHE='vh-cache-v1';
+    self.addEventListener('install',e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./'])) )});
+    self.addEventListener('activate',e=>{ e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))) });
+    self.addEventListener('fetch',e=>{ const req=e.request; e.respondWith(caches.match(req).then(r=>r||fetch(req).then(res=>{const copy=res.clone(); caches.open(CACHE).then(c=>c.put(req,copy)); return res;})).catch(()=>caches.match('./')))});
+  `;
+  const swUrl = URL.createObjectURL(new Blob([swCode], {type:'text/javascript'}));
+  if('serviceWorker' in navigator){ navigator.serviceWorker.register(swUrl).catch(()=>{}); }
+})();
+
+let deferredPrompt=null; window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; });
+const installBtn = document.getElementById('installBtn');
+installBtn.addEventListener('click', async ()=>{ if(deferredPrompt){ deferredPrompt.prompt(); deferredPrompt=null; }});
+
+/* =================== UI utils =================== */
+const $ = (s)=>document.querySelector(s);
+function toast(msg){const t=$('#toast');t.textContent=msg;t.style.opacity=1;setTimeout(()=>t.style.opacity=0,2200)}
+
+/* =================== Image utils (compression) =================== */
+async function compressImage(file, max=2000, quality=0.85){
+  const img = await createImageBitmap(file);
+  const scale = Math.min(1, max/Math.max(img.width,img.height));
+  const canvas = new OffscreenCanvas(Math.round(img.width*scale), Math.round(img.height*scale));
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  const blob = await canvas.convertToBlob({ type:'image/jpeg', quality });
+  return await blobToDataURL(blob);
+}
+function blobToDataURL(blob){ return new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob); }); }
+function fileToDataURL(file){ return new Promise((r,rej)=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
+
+/* =================== IndexedDB (autosave robuste) =================== */
+const DB_NAME='visithome-db', DB_STORE='reports';
+function idb(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open(DB_NAME,1);
+    req.onupgradeneeded = ()=>{ req.result.createObjectStore(DB_STORE); };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function dbGet(key){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction(DB_STORE,'readonly'); const st=tx.objectStore(DB_STORE); const rq=st.get(key); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error); }); }
+async function dbSet(key,val){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction(DB_STORE,'readwrite'); const st=tx.objectStore(DB_STORE); const rq=st.put(val,key); rq.onsuccess=()=>res(); rq.onerror=()=>rej(rq.error); }); }
+async function dbDel(key){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction(DB_STORE,'readwrite'); const st=tx.objectStore(DB_STORE); const rq=st.delete(key); rq.onsuccess=()=>res(); rq.onerror=()=>rej(rq.error); }); }
+
+/* =================== Form state =================== */
+let logoDataUrl=null;
+$('#logo').addEventListener('change', async (e)=>{
+  const file=e.target.files?.[0]; if(!file) return;
+  // on compresse aussi le logo (utile si lourd)
+  try{ logoDataUrl = await compressImage(file, 800, 0.9); } catch{ logoDataUrl = await fileToDataURL(file); }
+  const img=new Image(); img.onload=()=>{ const p=$('#logoPreview'); p.innerHTML=''; p.appendChild(img) }; img.src=logoDataUrl;
+  scheduleSave();
+});
+
+const rooms=[];
+function addRoom(data={}){
+  const wrap=document.createElement('div'); wrap.className='room';
+  wrap.innerHTML=`
+    <div class='row'>
+      <div>
+        <label>Nom de la pièce</label>
+        <input type='text' class='room-name' placeholder='Séjour, Cuisine…' value='${data.name||''}'>
+      </div>
+      <div>
+        <label>Note /5 (optionnel)</label>
+        <input type='number' min='0' max='5' step='0.5' class='room-score' value='${data.score||''}' placeholder='4.5'>
+      </div>
+    </div>
+    <label>Descriptif</label>
+    <textarea class='room-desc' placeholder='État, matériaux, luminosité…'>${data.desc||''}</textarea>
+    <label>Photos (caméra arrière activable)</label>
+    <input class='room-files' type='file' accept='image/*' capture='environment' multiple>
+    <div class='muted' style='margin-top:6px'>Les photos sont compressées localement pour éviter tout lag.</div>
+    <div class='footer'><button class='btn' data-remove>🗑️ Supprimer la pièce</button></div>
+  `;
+  $('#rooms').appendChild(wrap);
+  const input=wrap.querySelector('.room-files');
+  input.addEventListener('change', async (e)=>{
+    const files=[...e.target.files];
+    input._dataUrls=[];
+    const batch=8; // traitement par lots
+    for(let i=0;i<files.length;i+=batch){
+      const slice=files.slice(i,i+batch);
+      const urls = await Promise.all(slice.map(f=>compressImage(f,2000,0.85).catch(()=>fileToDataURL(f))));
+      input._dataUrls.push(...urls);
+      scheduleSave();
+    }
+    toast(`${input._dataUrls.length} photo(s) ajoutée(s)`);
+  });
+  wrap.querySelector('[data-remove]').addEventListener('click',()=>{ wrap.remove(); scheduleSave(); toast('Pièce supprimée'); });
+}
+$('#addRoomBtn').addEventListener('click', ()=>{ addRoom(); });
+addRoom({name:'Séjour'});
+
+function collect(){
+  const roomsData=[];
+  document.querySelectorAll('#rooms .room').forEach((el)=>{
+    const name=el.querySelector('.room-name').value.trim();
+    const score=el.querySelector('.room-score').value;
+    const desc=el.querySelector('.room-desc').value.trim();
+    const photos=(el.querySelector('.room-files')._dataUrls)||[];
+    roomsData.push({name,score,desc,photos});
+  });
+  return {
+    logoDataUrl,
+    titre:$('#titre').value.trim(),
+    adresse:$('#adresse').value.trim(),
+    surface:$('#surface').value.trim(),
+    prix:$('#prix').value.trim(),
+    dateVisite:$('#dateVisite').value.trim(),
+    descGeneral:$('#descGeneral').value.trim(),
+    rooms:roomsData,
+    ts:Date.now()
+  };
+}
+function loadState(d){
+  logoDataUrl=d.logoDataUrl||null; if(logoDataUrl){const img=new Image(); img.onload=()=>{$('#logoPreview').innerHTML='';$('#logoPreview').appendChild(img)}; img.src=logoDataUrl;}
+  $('#titre').value=d.titre||''; $('#adresse').value=d.adresse||''; $('#surface').value=d.surface||''; $('#prix').value=d.prix||''; $('#dateVisite').value=d.dateVisite||''; $('#descGeneral').value=d.descGeneral||'';
+  $('#rooms').innerHTML='';
+  (d.rooms||[]).forEach(r=>{ addRoom(r); const input = $('#rooms .room:last-child .room-files'); input._dataUrls=r.photos||[]; });
+}
+
+let saveTimer=null; function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(autoSave, 1000); }
+async function autoSave(){ await dbSet('current', collect()); }
+
+// autosave toutes les 10s
+setInterval(()=>autoSave(), 10000);
+
+// boutons
+$('#saveDraftBtn').addEventListener('click', async ()=>{ await autoSave(); toast('Brouillon sauvegardé'); });
+$('#loadDraftBtn').addEventListener('click', async ()=>{ const d=await dbGet('current'); if(d){ loadState(d); toast('Brouillon chargé'); } else { toast('Aucun brouillon'); }});
+$('#clearBtn').addEventListener('click', async ()=>{ await dbDel('current'); toast('Données locales supprimées'); });
+
+// charger au démarrage
+(async ()=>{ const d=await dbGet('current'); if(d) loadState(d); })();
+
+/* =================== QR Google Maps =================== */
+function makeMapQR(adresse){
+  const tmp=document.createElement('div');
+  const q = new QRCode(tmp,{ text:`https://maps.google.com/?q=${encodeURIComponent(adresse)}`, width:180, height:180 });
+  const canvas = tmp.querySelector('canvas');
+  const url = canvas? canvas.toDataURL('image/png') : null; tmp.remove(); return url;
+}
+
+/* =================== PDF premium (page de garde + sommaire) =================== */
+$('#generateBtn').addEventListener('click', async ()=>{
+  const data=collect();
+  if(!data.titre){ toast('Ajoute un titre'); return }
+  if(!data.adresse){ toast('Ajoute l\'adresse'); return }
+
+  const headerBand = {
+    canvas:[{ type:'rect', x:0, y:0, w:515, h:6, color:'#DD183B' }], margin:[0,0,0,10]
+  };
+
+  const cover = [
+    { text:'VISITHOME', color:'#DD183B', bold:true, letterSpacing:2, margin:[0,0,0,8] },
+    { text:'Rapport de visite', style:'coverTitle' },
+    { text:data.titre, style:'coverSubtitle' },
+    { text:`${data.dateVisite?`Visité le ${data.dateVisite} · `:''}${data.surface?`${data.surface} m² · `:''}${data.prix?`${Number(data.prix).toLocaleString('fr-FR')} €`:''}`, style:'meta', margin:[0,8,0,20] },
+    { text:data.adresse, style:'h2' }
+  ];
+  if(data.logoDataUrl){ cover.unshift({ image:data.logoDataUrl, fit:[70,70], alignment:'right' }); }
+
+  const toc = { toc:{ title:{ text:'Sommaire', style:'h2' } }, pageBreak:'after' };
+
+  const content=[ headerBand, { stack:cover, margin:[0,40,0,40], pageBreak:'after' }, toc ];
+
+  // Bloc adresse + QR
+  const mapQR = makeMapQR(data.adresse);
+  content.push({ tocItem:true, text:'Adresse & situation', style:'h2' });
+  content.push({ columns:[ { width:'*', stack:[ { text:data.adresse, margin:[0,2,0,0] }, { text:'Scannez pour ouvrir la carte (Google Maps).', style:'note' } ] }, { width:180, image:mapQR, alignment:'right' } ], columnGap:14 });
+
+  // Descriptif général
+  if(data.descGeneral){ content.push({ text:'\n' }); content.push({ tocItem:true, text:'Descriptif général', style:'h2' }); content.push({ text:data.descGeneral, margin:[0,4,0,0]}); }
+
+  // Pièces
+  (data.rooms||[]).filter(r=>r && (r.name||r.desc||(r.photos||[]).length)).forEach((r,i)=>{
+    content.push({ text:'\n' });
+    content.push({ tocItem:true, text:`${r.name? r.name : 'Pièce ' + (i+1)}${r.score? ` – ${r.score}/5`:''}`, style:'h2' });
+    if(r.desc) content.push({ text:r.desc, margin:[0,2,0,6] });
+    const photos=(r.photos||[]).slice(0,20).map(src=>({ image:src, width:180, margin:[0,0,8,8] }));
+    if(photos.length){ const rows=[]; for(let k=0;k<photos.length;k+=2){ rows.push([photos[k], photos[k+1]||{text:''}]) } content.push({ table:{ widths:['*','*'], body:rows }, layout:'noBorders' }); }
+  });
+
+  const dd={
+    pageSize:'A4', pageMargins:[32,36,32,40],
+    footer:(currentPage,pageCount)=>({ columns:[ { text:'VisitHome', color:'#DD183B' }, { text:`Page ${currentPage} / ${pageCount}`, alignment:'right', color:'#6b7280' } ], margin:[24,0,24,12] }),
+    content,
+    styles:{
+      coverTitle:{ fontSize:24, bold:true },
+      coverSubtitle:{ fontSize:16, color:'#111' },
+      h2:{ fontSize:14, bold:true, color:'#111' },
+      note:{ fontSize:9, color:'#6b7280' },
+      meta:{ fontSize:10, color:'#6b7280' }
+    }, defaultStyle:{ fontSize:11, lineHeight:1.25 }
+  };
+
+  pdfMake.createPdf(dd).download(`${sanitizeFilename(data.titre)}.pdf`);
+  toast('PDF généré');
+});
+
+function sanitizeFilename(s){ return (s||'rapport').replace(/[^a-z0-9\-_. ]/gi,'_').slice(0,120); }
+</script>
+</body>
+</html>
