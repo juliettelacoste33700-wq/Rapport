@@ -278,26 +278,42 @@ function addRoom(data={}){
         <input type='number' min='0' max='5' step='0.5' class='room-score' value='${data.score||''}' placeholder='4.5'>
       </div>
     </div>
+
     <label>Descriptif</label>
     <textarea class='room-desc' placeholder='État, matériaux, luminosité…'>${data.desc||''}</textarea>
 
     <div class='row'>
       <div>
-        <label>Photos (caméra arrière activable)</label>
+        <label>Photos (max 5 · caméra arrière activable)</label>
         <input class='room-files' type='file' accept='image/*' capture='environment' multiple>
-        <div class='muted' style='margin-top:6px'>Les photos sont compressées localement pour éviter tout lag.</div>
+        <div class='muted' style='margin-top:6px'>Les photos sont compressées localement. Limite : 5 par pièce.</div>
       </div>
       <div>
-        <label>Critères (coche pour la moyenne)</label>
-        <div class='chips'>
-          <label><input type='checkbox' class='crit' value='Luminosité' ${data.c?.includes('Luminosité')?'checked':''}> Luminosité</label>
-          <label><input type='checkbox' class='crit' value='Bruit' ${data.c?.includes('Bruit')?'checked':''}> Bruit</label>
-          <label><input type='checkbox' class='crit' value='Murs' ${data.c?.includes('Murs')?'checked':''}> Murs</label>
-          <label><input type='checkbox' class='crit' value='Sols' ${data.c?.includes('Sols')?'checked':''}> Sols</label>
-          <label><input type='checkbox' class='crit' value='Fenêtres' ${data.c?.includes('Fenêtres')?'checked':''}> Fenêtres</label>
-          <label><input type='checkbox' class='crit' value='Rangements' ${data.c?.includes('Rangements')?'checked':''}> Rangements</label>
-          <label><input type='checkbox' class='crit' value='Parties communes' ${data.c?.includes('Parties communes')?'checked':''}> Parties communes</label>
-          <label><input type='checkbox' class='crit' value='Stationnement' ${data.c?.includes('Stationnement')?'checked':''}> Stationnement</label>
+        <label>Critères</label>
+        <div class='chips' style='gap:12px;flex-wrap:wrap'>
+          <span>
+            <small class='muted' style='display:block;margin-bottom:4px'>Exposition</small>
+            <select class='room-expo'>
+              ${['N','NE','E','SE','S','SO','O','NO'].map(x=>`<option ${data.expo===x?'selected':''}>${x}</option>`).join('')}
+            </select>
+          </span>
+          <span>
+            <small class='muted' style='display:block;margin-bottom:4px'>État</small>
+            <select class='room-etat'>
+              ${['Parfait état','Bon état','À rafraîchir','Mauvais état'].map(x=>`<option ${data.etat===x?'selected':''}>${x}</option>`).join('')}
+            </select>
+          </span>
+          <span>
+            <small class='muted' style='display:block;margin-bottom:4px'>Type de sols</small>
+            <select class='room-sols'>
+              ${['Parquet','Carrelage','Lino','Moquette'].map(x=>`<option ${data.sols===x?'selected':''}>${x}</option>`).join('')}
+            </select>
+          </span>
+
+          <label style='display:flex;align-items:center;gap:6px'><input type='checkbox' class='crit' value='Luminosité' ${data.c?.includes('Luminosité')?'checked':''}> Luminosité</label>
+          <label style='display:flex;align-items:center;gap:6px'><input type='checkbox' class='crit' value='Bruit' ${data.c?.includes('Bruit')?'checked':''}> Bruit</label>
+          <label style='display:flex;align-items:center;gap:6px'><input type='checkbox' class='crit' value='Fenêtres' ${data.c?.includes('Fenêtres')?'checked':''}> Fenêtres</label>
+          <label style='display:flex;align-items:center;gap:6px'><input type='checkbox' class='crit' value='Rangements' ${data.c?.includes('Rangements')?'checked':''}> Rangements</label>
         </div>
       </div>
     </div>
@@ -307,15 +323,16 @@ function addRoom(data={}){
 
   const input=wrap.querySelector('.room-files');
   input.addEventListener('change', async (e)=>{
-    const files=[...e.target.files];
+    const files=[...e.target.files].slice(0,5); // max 5
     input._dataUrls=[];
-    const batch=8;
+    const batch=5;
     for(let i=0;i<files.length;i+=batch){
       const slice=files.slice(i,i+batch);
       const urls = await Promise.all(slice.map(f=>compressImage(f,2000,0.85).catch(()=>fileToDataURL(f))));
       input._dataUrls.push(...urls);
       scheduleSave();
     }
+    if (e.target.files.length > 5) toast('Limité à 5 photos par pièce — seules les 5 premières sont conservées.');
     toast(`${input._dataUrls.length} photo(s) ajoutée(s)`);
   });
   wrap.querySelector('[data-remove]').addEventListener('click',()=>{ wrap.remove(); scheduleSave(); toast('Pièce supprimée'); });
@@ -335,7 +352,10 @@ function collect(){
     const desc=el.querySelector('.room-desc').value.trim();
     const photos=(el.querySelector('.room-files')._dataUrls)||[];
     const crit=[...el.querySelectorAll('.crit:checked')].map(x=>x.value);
-    roomsData.push({name,score:isNaN(score)?'':score,desc,photos,c:crit});
+    const expo = el.querySelector('.room-expo')?.value || '';
+    const etat = el.querySelector('.room-etat')?.value || '';
+    const sols = el.querySelector('.room-sols')?.value || '';
+    roomsData.push({name,score:isNaN(score)?'':score,desc,photos,c:crit,expo,etat,sols});
   });
   return {
     logoDataUrl,
@@ -348,7 +368,6 @@ function collect(){
     mapProvider:$('#mapProvider').value,
     descGeneral:$('#descGeneral').value.trim(),
     facadeDataUrl,
-    // détails bien
     details: window._details||{},
     rooms:roomsData,
     ts:Date.now()
@@ -393,13 +412,11 @@ async function getStaticMapDataUrl(addr, provider, key){
     let url='';
     if(provider==='google'){
       url = `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(addr)}&zoom=15&size=800x400&scale=2&maptype=roadmap&markers=color:red|${encodeURIComponent(addr)}&key=${encodeURIComponent(key)}`;
-    }else{ // MapTiler
-      // Note: on utilise le endpoint "geocoding" implicite via adresse; certains plans exigent lat/lng — ça marche souvent par string query.
+    }else{
       url = `https://api.maptiler.com/maps/streets/static/${encodeURIComponent(addr)}.png?zoom=15&size=1600x800&key=${encodeURIComponent(key)}`;
     }
     const res = await fetch(url);
     const blob = await res.blob();
-    // compression légère encore
     const src = await fileToDataURL(new File([blob],'map.png',{type:blob.type}));
     const img = await loadImage(src);
     const canvas=document.createElement('canvas'); canvas.width=1000; canvas.height=Math.round(1000*(img.height/img.width));
@@ -427,6 +444,13 @@ Nous espérons que ce rapport contribuera à un choix éclairé et serein de vot
 window.addEventListener('DOMContentLoaded', async ()=>{
   const el=document.getElementById('disclaimer');
   if(el && !el.value){ el.value=disclaimerDefault; }
+  // Auto-remplissage de la clé API si vide (selon ta demande)
+  const DEFAULT_MAP_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkdHl3enRkbGt5Y2ZkZmVybXVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5MDE2NDUsImV4cCI6MjA3NDQ3NzY0NX0.6fONjzlRO2LhPgLbGfcVTmaTXw24BcKHvXS9wJIclj4";
+  const mk = document.getElementById('mapKey');
+  if (mk && !mk.value) {
+    const d=await dbGet('current');
+    if (!d || !d.mapKey) mk.value = DEFAULT_MAP_KEY;
+  }
   const d=await dbGet('current'); if(d) loadState(d);
 });
 
@@ -445,74 +469,70 @@ document.getElementById('generateBtn').addEventListener('click', async ()=>{
   if(!data.titre){ toast('Ajoute un titre'); return }
   if(!data.adresse){ toast('Ajoute l\'adresse'); return }
 
-  // Header cover: logo centré au-dessus de la ligne rouge, puis Titre, méta, QR, adresse
-  const headerBand = { canvas:[{ type:'rect', x:0, y:0, w:515, h:6, color:'#DD183B' }], margin:[0,0,0,10] };
-  const coverTop = [];
-  if(data.logoDataUrl){ coverTop.push({ image:data.logoDataUrl, fit:[70,70], alignment:'center', margin:[0,0,0,6] }); }
-  coverTop.push(headerBand);
-  const metaLine = `${data.dateVisite?`Visité le ${data.dateVisite} · `:''}${data.surface?`${data.surface} m² · `:''}${data.prix?`${Number(data.prix).toLocaleString('fr-FR')} €`:''}`;
-  const qr = makeMapQR(data.adresse);
+  const fmtEUR = (v)=> new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(Number(v||0));
 
-  const cover = [
-    ...coverTop,
+  // --- Page de garde (logo + bandeau + titre + QR + adresse)
+  const coverStack = [
+    ...(data.logoDataUrl ? [{ image:data.logoDataUrl, fit:[70,70], alignment:'center', margin:[0,0,0,6] }] : []),
+    { canvas:[{ type:'rect', x:0, y:0, w:515, h:6, color:'#DD183B' }], margin:[0,0,0,10] },
     { text:'Rapport de visite', style:'coverTitle', alignment:'center', margin:[0,8,0,0] },
     { text:data.titre, style:'coverSubtitle', alignment:'center' },
-    { text:metaLine, style:'meta', alignment:'center', margin:[0,6,0,10] },
-    { image: qr, width: 120, alignment:'center', margin:[0,0,0,10] },
-    { text:data.adresse, style:'h2', alignment:'center' }
+    { text:`${data.dateVisite?`Visité le ${data.dateVisite} · `:''}${data.surface?`${data.surface} m² · `:''}${data.prix?fmtEUR(data.prix):''}`, style:'meta', alignment:'center', margin:[0,6,0,10] },
+    { image: makeMapQR(data.adresse), width: 120, alignment:'center', margin:[0,0,0,10] },
+    { text:data.adresse, style:'h2', alignment:'center', margin:[0,0,0,6] },
   ];
 
-  const toc = { toc:{ title:{ text:'Sommaire', style:'h2' } }, pageBreak:'after' };
-  const content=[ { stack:cover, margin:[0,20,0,20], pageBreak:'after' }, toc ];
-
-  // Adresse & situation: carte statique (si clé), puis photo façade
-  content.push({ tocItem:true, text:'Adresse & situation', style:'h2' });
+  // Plan + façade
   let mapImg=null;
   if(data.mapKey){ mapImg = await getStaticMapDataUrl(data.adresse, data.mapProvider, data.mapKey); }
-  if(mapImg){ content.push({ image:mapImg, width:500, margin:[0,4,0,8] }); }
-  if(data.facadeDataUrl){ content.push({ image:data.facadeDataUrl, width:500, margin:[0,0,0,10] }); }
+  if(mapImg) coverStack.push({ image:mapImg, width:500, margin:[0,8,0,8] });
+  if(data.facadeDataUrl) coverStack.push({ image:data.facadeDataUrl, width:500, margin:[0,0,0,10] });
 
-  // Disclaimer premium AVANT descriptif
-  const det = data.details||{};
-  if(det.disclaimer){ content.push(styleDisclaimer(det.disclaimer)); }
+  // Disclaimer premium (sur la page de garde, après plan/façade)
+  if(data.details?.disclaimer){ coverStack.push(styleDisclaimer(data.details.disclaimer)); }
+
+  // Terminer la page de garde
+  const content=[ { stack:coverStack, margin:[0,20,0,20], pageBreak:'after' } ];
+
+  // Sommaire (après le disclaimer)
+  content.push({ toc:{ title:{ text:'Sommaire', style:'h2' } }, pageBreak:'after' });
 
   // Détail du bien
+  const det = data.details||{};
   content.push({ text:'Détail du bien', style:'h2' });
   content.push({ table:{ widths:['*','*','*'], body:[
     [ {text:`Type : ${det.d_type||''}`}, {text:`Étage/Asc. : ${det.d_etage||''}`}, {text:`Année : ${det.d_annee||''}`} ],
     [ {text:`DPE/GES : ${det.d_dpe||''}`}, {text:`Chauffage : ${det.d_chauffage||''}`}, {text:`Copro/Charges : ${det.d_copro||''}`} ]
   ] }, layout:'lightHorizontalLines', margin:[0,2,0,8] });
 
-  // Descriptif général
+  // Descriptif
   if(data.descGeneral){ content.push({ tocItem:true, text:'Descriptif général', style:'h2' }); content.push({ text:data.descGeneral, margin:[0,4,0,8]}); }
 
-  // Pièces avec critères + photos + note calculée
+  // Pièces — 1 page par pièce, sommaire sans note, pas de “note calculée”
   let globalScores=[];
   (data.rooms||[]).filter(r=>r && (r.name||r.desc||(r.photos||[]).length)).forEach((r,i)=>{
-    content.push({ tocItem:true, text:`${r.name? r.name : 'Pièce ' + (i+1)}${(typeof r.score==='number' && !isNaN(r.score))? ` – ${r.score}/5`:''}`, style:'h2' });
+    content.push({ tocItem:true, text:(r.name||`Pièce ${i+1}`), style:'h2', ...(i>0?{pageBreak:'before'}:{}) });
+
     if(r.desc) content.push({ text:r.desc, margin:[0,2,0,6] });
 
-    if(r.c && r.c.length){
-      content.push({ text:'Critères cochés :', style:'note' });
-      content.push({ ul: r.c.map(x=>({text:x})), margin:[0,0,0,6] });
-    }
+    const tags=[];
+    if (r.expo) tags.push(`Exposition : ${r.expo}`);
+    if (r.etat) tags.push(`État : ${r.etat}`);
+    if (r.sols) tags.push(`Sol : ${r.sols}`);
+    if (r.c && r.c.length) tags.push(...r.c);
+    if (tags.length) content.push({ ul: tags.map(x=>({text:x})), margin:[0,0,0,6] });
 
-    // photos 2 colonnes
-    const photos=(r.photos||[]).slice(0,20).map(src=>({ image:src, width:180, margin:[0,0,8,8] }));
+    const photos=(r.photos||[]).slice(0,5).map(src=>({ image:src, width:240, margin:[0,0,8,8] }));
     if(photos.length){
       const rows=[]; for(let k=0;k<photos.length;k+=2){ rows.push([photos[k], photos[k+1]||{text:''}]) }
       content.push({ table:{ widths:['*','*'], body:rows }, layout:'noBorders' });
     }
 
-    // moyenne auto
-    let avg = (typeof r.score==='number' && !isNaN(r.score)) ? r.score : null;
-    if(avg==null && r.c){ const denom=8; avg = Math.round((r.c.length/denom)*5*10)/10; }
-    if(avg!=null){ globalScores.push(avg); content.push({ text:`Note calculée : ${avg}/5`, style:'note', margin:[0,4,0,0] }); }
-
+    if (typeof r.score==='number' && !isNaN(r.score)) { globalScores.push(r.score); }
     content.push({ text:'\n' });
   });
 
-  // Synthèse globale
+  // Synthèse globale (si notes saisies manuellement)
   if(globalScores.length){
     const g = Math.round((globalScores.reduce((a,b)=>a+b,0)/globalScores.length)*10)/10;
     content.push({ text:`Synthèse : score global ${g}/5`, style:'h2' });
@@ -544,7 +564,6 @@ document.getElementById('generateBtn').addEventListener('click', async ()=>{
     }, defaultStyle:{ fontSize:11, lineHeight:1.25 }
   };
 
-  // logo pour pied de page
   window.__logoSmall = data.logoDataUrl || null;
 
   pdfMake.createPdf(dd).download(`${sanitizeFilename(data.titre)}.pdf`);
