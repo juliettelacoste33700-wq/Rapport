@@ -13,7 +13,10 @@
     .card{background:#fff;border:1px solid #eee;border-radius:18px;box-shadow:0 6px 20px rgba(0,0,0,.06)}
     .titlebar{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:linear-gradient(180deg,#fff 0,#fff 65%,#fff0 100%),var(--peche)}
     .titlebar h1{margin:0;font-size:22px}
-    .badge{display:inline-block;background:var(--peche);color:#8a0f22;border:1px dashed #f4c4bc;padding:6px 10px;border-radius:999px;font-size:12px}
+    .badge{display:inline-flex;align-items:center;gap:8px;background:var(--peche);color:#8a0f22;border:1px dashed #f4c4bc;padding:6px 10px;border-radius:999px;font-size:12px}
+    .dot{width:8px;height:8px;border-radius:50%}
+    .dot.off{background:#f43f5e}
+    .dot.on{background:#10b981}
     .section{padding:20px}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
@@ -36,9 +39,6 @@
     .chips{display:flex;gap:8px;flex-wrap:wrap}
     .chip{padding:6px 10px;border:1px solid #e5e7eb;border-radius:999px;background:#fff;cursor:pointer}
     .statusbar{display:flex;gap:10px;align-items:center;font-size:12px;color:#4b5563;margin-top:8px}
-    .dot{width:8px;height:8px;border-radius:50%}
-    .dot.off{background:#f43f5e}
-    .dot.on{background:#10b981}
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js"></script>
@@ -48,9 +48,7 @@
   <div class="container card">
     <div class="titlebar">
       <h1>VisitHome — Générateur de Rapport (PWA, offline)</h1>
-      <div>
-        <span class="badge" id="offlineBadge"><span class="dot on" id="netDot"></span> Statut : <strong id="netTxt">En ligne</strong></span>
-      </div>
+      <div class="badge"><span class="dot on" id="netDot"></span> Statut : <strong id="netTxt">En ligne</strong></div>
     </div>
     <div class="section">
 
@@ -108,13 +106,56 @@
 
       <div class="map-note"><strong>Plan / situation :</strong> le PDF inclura un QR code sous l’en-tête. Si tu saisis une clé API, on ajoute aussi l’image de la carte directement dans le PDF.</div>
 
-      <!-- Disclaimer -->
+      <!-- Détails & médias -->
       <div class="hr"></div>
-      <label>Disclaimer (sera mis en avant dans le PDF)</label>
-      <textarea id="disclaimer"></textarea>
+      <h2>Médias & détails du bien</h2>
+      <div class="row">
+        <div>
+          <label>Photo de la façade (s’affichera après la carte)</label>
+          <input id="facade" type="file" accept="image/*" capture="environment">
+        </div>
+        <div>
+          <label>Disclaimer (prévention / limites d'usage)</label>
+          <textarea id="disclaimer"></textarea>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Type de bien</label>
+          <select id="d_type">
+            <option>Appartement</option><option>Maison</option><option>Studio</option>
+            <option>T1</option><option>T2</option><option>T3</option><option>Autre</option>
+          </select>
+        </div>
+        <div>
+          <label>Étage / Ascenseur</label>
+          <input id="d_etage" type="text" placeholder="2e / oui" />
+        </div>
+        <div>
+          <label>Année</label>
+          <input id="d_annee" type="text" placeholder="1900" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>DPE / GES</label>
+          <input id="d_dpe" type="text" placeholder="D / E" />
+        </div>
+        <div>
+          <label>Chauffage</label>
+          <input id="d_chauffage" type="text" placeholder="Gaz, individuel" />
+        </div>
+        <div>
+          <label>Copropriété / Charges</label>
+          <input id="d_copro" type="text" placeholder="Oui / 1200 €/an" />
+        </div>
+      </div>
 
       <!-- Descriptif -->
-      <label style="margin-top:14px">Descriptif général</label>
+      <div class="hr"></div>
+      <label>Descriptif général</label>
       <textarea id="descGeneral" placeholder="État général, atouts, points de vigilance, environnement…"></textarea>
 
       <div class="hr"></div>
@@ -148,7 +189,226 @@
   <div id="toast" style="position:fixed;right:16px;bottom:16px;background:#111;color:#fff;padding:10px 14px;border-radius:10px;opacity:0;transition:all .25s"></div>
 
 <script>
-// Texte par défaut du disclaimer (premium styling)
+/* =================== PWA (manifest + service worker) =================== */
+(function setupPWA(){
+  const manifest = {
+    name: "VisitHome — Générateur de Rapport",
+    short_name: "VisitHome",
+    description: "App locale pour créer des rapports PDF de visite (offline)",
+    display: "standalone",
+    start_url: ".",
+    background_color: "#FFEDE6",
+    theme_color: "#DD183B",
+    icons: [
+      { src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='20' fill='%23FFEDE6'/><path d='M16 48 48 22 80 48v26H54V56H42v18H16z' fill='%23DD183B'/></svg>", sizes: "96x96", type:"image/svg+xml", purpose:"any" }
+    ]
+  };
+  const manifestHref = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'}));
+  const link = document.createElement('link'); link.rel='manifest'; link.href=manifestHref; document.head.appendChild(link);
+
+  const swCode = `
+    const CACHE='vh-cache-v3';
+    self.addEventListener('install',e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./'])))});
+    self.addEventListener('activate',e=>{ e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))))});
+    self.addEventListener('fetch',e=>{ e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{const copy=res.clone(); caches.open(CACHE).then(c=>c.put(e.request,copy)); return res;})).catch(()=>caches.match('./')))});
+  `;
+  const swUrl = URL.createObjectURL(new Blob([swCode], {type:'text/javascript'}));
+  if('serviceWorker' in navigator){ navigator.serviceWorker.register(swUrl).catch(()=>{}); }
+})();
+let deferredPrompt=null; window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; });
+document.getElementById('installBtn').addEventListener('click', async ()=>{ if(deferredPrompt){ deferredPrompt.prompt(); deferredPrompt=null; }});
+
+/* =================== Net status =================== */
+function updateNet(){ const on=navigator.onLine; document.getElementById('netDot').className='dot ' + (on?'on':'off'); document.getElementById('netTxt').textContent= on? 'En ligne':'Hors-ligne'; }
+window.addEventListener('online',updateNet); window.addEventListener('offline',updateNet); updateNet();
+
+/* =================== Helpers UI =================== */
+const $ = (s)=>document.querySelector(s);
+function toast(msg){const t=$('#toast');t.textContent=msg;t.style.opacity=1;setTimeout(()=>t.style.opacity=0,2200)}
+
+/* =================== Image utils (compat iPhone, anti-lag) =================== */
+function fileToDataURL(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
+function loadImage(src){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=src; }); }
+async function compressImage(file, max=2000, quality=0.85){
+  const src = await fileToDataURL(file);
+  const img = await loadImage(src);
+  const scale = Math.min(1, max/Math.max(img.width,img.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.width*scale);
+  canvas.height = Math.round(img.height*scale);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+/* =================== IndexedDB autosave =================== */
+const DB_NAME='visithome-db', DB_STORE='reports';
+function idb(){return new Promise((resolve,reject)=>{ const req=indexedDB.open(DB_NAME,1); req.onupgradeneeded=()=>{req.result.createObjectStore(DB_STORE)}; req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error); });}
+async function dbGet(key){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction(DB_STORE,'readonly'); const st=tx.objectStore(DB_STORE); const rq=st.get(key); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error); }); }
+async function dbSet(key,val){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction(DB_STORE,'readwrite'); const st=tx.objectStore(DB_STORE); const rq=st.put(val,key); rq.onsuccess=()=>res(); rq.onerror=()=>rej(rq.error); }); }
+async function dbDel(key){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction(DB_STORE,'readwrite'); const st=tx.objectStore(DB_STORE); const rq=st.delete(key); rq.onsuccess=()=>res(); rq.onerror=()=>rej(rq.error); }); }
+
+/* =================== State =================== */
+let logoDataUrl=null;
+let facadeDataUrl=null;
+
+document.getElementById('logo').addEventListener('change', async (e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  try{ logoDataUrl = await compressImage(f,800,0.9); }catch{ logoDataUrl = await fileToDataURL(f); }
+  const img=new Image(); img.onload=()=>{ const p=$('#logoPreview'); p.innerHTML=''; p.appendChild(img)}; img.src=logoDataUrl;
+  scheduleSave();
+});
+document.getElementById('facade').addEventListener('change', async (e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  try{ facadeDataUrl = await compressImage(f,2000,0.85); }catch{ facadeDataUrl = await fileToDataURL(f); }
+  scheduleSave();
+});
+
+const rooms=[];
+function addRoom(data={}){
+  const wrap=document.createElement('div'); wrap.className='room';
+  wrap.innerHTML=`
+    <div class='row'>
+      <div>
+        <label>Nom de la pièce</label>
+        <input type='text' class='room-name' placeholder='Séjour, Cuisine…' value='${data.name||''}'>
+      </div>
+      <div>
+        <label>Note /5 (optionnel)</label>
+        <input type='number' min='0' max='5' step='0.5' class='room-score' value='${data.score||''}' placeholder='4.5'>
+      </div>
+    </div>
+    <label>Descriptif</label>
+    <textarea class='room-desc' placeholder='État, matériaux, luminosité…'>${data.desc||''}</textarea>
+
+    <div class='row'>
+      <div>
+        <label>Photos (caméra arrière activable)</label>
+        <input class='room-files' type='file' accept='image/*' capture='environment' multiple>
+        <div class='muted' style='margin-top:6px'>Les photos sont compressées localement pour éviter tout lag.</div>
+      </div>
+      <div>
+        <label>Critères (coche pour la moyenne)</label>
+        <div class='chips'>
+          <label><input type='checkbox' class='crit' value='Luminosité' ${data.c?.includes('Luminosité')?'checked':''}> Luminosité</label>
+          <label><input type='checkbox' class='crit' value='Bruit' ${data.c?.includes('Bruit')?'checked':''}> Bruit</label>
+          <label><input type='checkbox' class='crit' value='Murs' ${data.c?.includes('Murs')?'checked':''}> Murs</label>
+          <label><input type='checkbox' class='crit' value='Sols' ${data.c?.includes('Sols')?'checked':''}> Sols</label>
+          <label><input type='checkbox' class='crit' value='Fenêtres' ${data.c?.includes('Fenêtres')?'checked':''}> Fenêtres</label>
+          <label><input type='checkbox' class='crit' value='Rangements' ${data.c?.includes('Rangements')?'checked':''}> Rangements</label>
+          <label><input type='checkbox' class='crit' value='Parties communes' ${data.c?.includes('Parties communes')?'checked':''}> Parties communes</label>
+          <label><input type='checkbox' class='crit' value='Stationnement' ${data.c?.includes('Stationnement')?'checked':''}> Stationnement</label>
+        </div>
+      </div>
+    </div>
+    <div class='footer'><button class='btn' data-remove>🗑️ Supprimer la pièce</button></div>
+  `;
+  $('#rooms').appendChild(wrap);
+
+  const input=wrap.querySelector('.room-files');
+  input.addEventListener('change', async (e)=>{
+    const files=[...e.target.files];
+    input._dataUrls=[];
+    const batch=8;
+    for(let i=0;i<files.length;i+=batch){
+      const slice=files.slice(i,i+batch);
+      const urls = await Promise.all(slice.map(f=>compressImage(f,2000,0.85).catch(()=>fileToDataURL(f))));
+      input._dataUrls.push(...urls);
+      scheduleSave();
+    }
+    toast(`${input._dataUrls.length} photo(s) ajoutée(s)`);
+  });
+  wrap.querySelector('[data-remove]').addEventListener('click',()=>{ wrap.remove(); scheduleSave(); toast('Pièce supprimée'); });
+}
+
+document.getElementById('addRoomBtn').addEventListener('click', ()=> addRoom() );
+document.getElementById('quickCuisine').addEventListener('click', ()=> addRoom({name:'Cuisine'}) );
+document.getElementById('quickChambre').addEventListener('click', ()=> addRoom({name:'Chambre'}) );
+document.getElementById('quickSdb').addEventListener('click', ()=> addRoom({name:'Salle de bains'}) );
+addRoom({name:'Séjour'});
+
+function collect(){
+  const roomsData=[];
+  document.querySelectorAll('#rooms .room').forEach((el)=>{
+    const name=el.querySelector('.room-name').value.trim();
+    const score=parseFloat(el.querySelector('.room-score').value||'');
+    const desc=el.querySelector('.room-desc').value.trim();
+    const photos=(el.querySelector('.room-files')._dataUrls)||[];
+    const crit=[...el.querySelectorAll('.crit:checked')].map(x=>x.value);
+    roomsData.push({name,score:isNaN(score)?'':score,desc,photos,c:crit});
+  });
+  return {
+    logoDataUrl,
+    titre:$('#titre').value.trim(),
+    adresse:$('#adresse').value.trim(),
+    surface:$('#surface').value.trim(),
+    prix:$('#prix').value.trim(),
+    dateVisite:$('#dateVisite').value.trim(),
+    mapKey:$('#mapKey').value.trim(),
+    mapProvider:$('#mapProvider').value,
+    descGeneral:$('#descGeneral').value.trim(),
+    facadeDataUrl,
+    // détails bien
+    details: window._details||{},
+    rooms:roomsData,
+    ts:Date.now()
+  };
+}
+function loadState(d){
+  logoDataUrl=d.logoDataUrl||null; if(logoDataUrl){const img=new Image(); img.onload=()=>{$('#logoPreview').innerHTML='';$('#logoPreview').appendChild(img)}; img.src=logoDataUrl;}
+  $('#titre').value=d.titre||''; $('#adresse').value=d.adresse||''; $('#surface').value=d.surface||''; $('#prix').value=d.prix||''; $('#dateVisite').value=d.dateVisite||''; $('#descGeneral').value=d.descGeneral||''; $('#mapKey').value=d.mapKey||''; $('#mapProvider').value=d.mapProvider||'google';
+  facadeDataUrl=d.facadeDataUrl||null;
+  $('#rooms').innerHTML='';
+  (d.rooms||[]).forEach(r=>{ addRoom(r); const input = $('#rooms .room:last-child .room-files'); input._dataUrls=r.photos||[]; });
+  window._details=d.details||{};
+  const fields=['d_type','d_etage','d_annee','d_dpe','d_chauffage','d_copro','disclaimer'];
+  fields.forEach(id=>{ const el=document.getElementById(id); if(el && d.details && d.details[id]) el.value=d.details[id]; });
+}
+
+let saveTimer=null; function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(autoSave, 600); }
+async function autoSave(){ await dbSet('current', collect()); document.getElementById('saveStatus').textContent='Brouillon enregistré • ' + new Date().toLocaleTimeString(); }
+setInterval(()=>autoSave(), 10000);
+
+document.getElementById('saveDraftBtn').addEventListener('click', async ()=>{ await autoSave(); toast('Brouillon sauvegardé'); });
+document.getElementById('loadDraftBtn').addEventListener('click', async ()=>{ const d=await dbGet('current'); if(d){ loadState(d); toast('Brouillon chargé'); } else { toast('Aucun brouillon'); }});
+document.getElementById('clearBtn').addEventListener('click', async ()=>{ await dbDel('current'); toast('Données locales supprimées'); });
+
+/* =================== Détails du bien binding =================== */
+(function bindDetails(){
+  window._details = window._details||{};
+  const fields=['d_type','d_etage','d_annee','d_dpe','d_chauffage','d_copro','disclaimer'];
+  fields.forEach(id=>{ const el=document.getElementById(id); el.addEventListener('input',()=>{ window._details[id]=el.value; scheduleSave(); }); });
+})();
+
+/* =================== QR & Static Map =================== */
+function makeMapQR(adresse){
+  const tmp=document.createElement('div');
+  new QRCode(tmp,{ text:`https://maps.google.com/?q=${encodeURIComponent(adresse)}`, width:140, height:140 });
+  const canvas = tmp.querySelector('canvas');
+  const url = canvas? canvas.toDataURL('image/png') : null; tmp.remove(); return url;
+}
+async function getStaticMapDataUrl(addr, provider, key){
+  if(!addr || !key) return null;
+  try{
+    let url='';
+    if(provider==='google'){
+      url = `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(addr)}&zoom=15&size=800x400&scale=2&maptype=roadmap&markers=color:red|${encodeURIComponent(addr)}&key=${encodeURIComponent(key)}`;
+    }else{ // MapTiler
+      // Note: on utilise le endpoint "geocoding" implicite via adresse; certains plans exigent lat/lng — ça marche souvent par string query.
+      url = `https://api.maptiler.com/maps/streets/static/${encodeURIComponent(addr)}.png?zoom=15&size=1600x800&key=${encodeURIComponent(key)}`;
+    }
+    const res = await fetch(url);
+    const blob = await res.blob();
+    // compression légère encore
+    const src = await fileToDataURL(new File([blob],'map.png',{type:blob.type}));
+    const img = await loadImage(src);
+    const canvas=document.createElement('canvas'); canvas.width=1000; canvas.height=Math.round(1000*(img.height/img.width));
+    const ctx=canvas.getContext('2d'); ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    return canvas.toDataURL('image/jpeg',0.9);
+  }catch(e){ console.warn('Static map error', e); return null; }
+}
+
+/* =================== Disclaimer par défaut + style premium =================== */
 const disclaimerDefault = `Informations importantes
 
 Le présent rapport est établi par VisitHome à la demande exclusive du client.
@@ -162,16 +422,15 @@ Les constats présentés reflètent uniquement la situation observée à la date
 
 VisitHome recommande au client de prendre toutes mesures de prudence habituelles avant tout engagement (consultation des documents officiels, diagnostics, règlements de copropriété, servitudes, acte notarié, etc.).
 
-Nous espérons que ce rapport contribuera à un choix éclairé et serein de votre part.
-VisitHome vous remercie pour votre confiance et vous souhaite pleine réussite dans votre démarche.`;
+Nous espérons que ce rapport contribuera à un choix éclairé et serein de votre part. VisitHome vous remercie pour votre confiance et vous souhaite pleine réussite dans votre démarche.`;
 
-// injection du disclaimer par défaut si vide
-window.addEventListener('DOMContentLoaded', ()=>{
+window.addEventListener('DOMContentLoaded', async ()=>{
   const el=document.getElementById('disclaimer');
   if(el && !el.value){ el.value=disclaimerDefault; }
+  const d=await dbGet('current'); if(d) loadState(d);
 });
 
-// Style premium pour le PDF
+/* Encadré premium pour disclaimer */
 function styleDisclaimer(text){
   return {
     table:{ widths:['*'], body:[[ { text:text, fontSize:10, italics:true, fillColor:'#F9FAFB', color:'#374151', margin:[8,6,8,6] } ]] },
@@ -179,6 +438,120 @@ function styleDisclaimer(text){
     margin:[0,4,0,8]
   };
 }
+
+/* =================== PDF generation =================== */
+document.getElementById('generateBtn').addEventListener('click', async ()=>{
+  const data=collect();
+  if(!data.titre){ toast('Ajoute un titre'); return }
+  if(!data.adresse){ toast('Ajoute l\'adresse'); return }
+
+  // Header cover: logo centré au-dessus de la ligne rouge, puis Titre, méta, QR, adresse
+  const headerBand = { canvas:[{ type:'rect', x:0, y:0, w:515, h:6, color:'#DD183B' }], margin:[0,0,0,10] };
+  const coverTop = [];
+  if(data.logoDataUrl){ coverTop.push({ image:data.logoDataUrl, fit:[70,70], alignment:'center', margin:[0,0,0,6] }); }
+  coverTop.push(headerBand);
+  const metaLine = `${data.dateVisite?`Visité le ${data.dateVisite} · `:''}${data.surface?`${data.surface} m² · `:''}${data.prix?`${Number(data.prix).toLocaleString('fr-FR')} €`:''}`;
+  const qr = makeMapQR(data.adresse);
+
+  const cover = [
+    ...coverTop,
+    { text:'Rapport de visite', style:'coverTitle', alignment:'center', margin:[0,8,0,0] },
+    { text:data.titre, style:'coverSubtitle', alignment:'center' },
+    { text:metaLine, style:'meta', alignment:'center', margin:[0,6,0,10] },
+    { image: qr, width: 120, alignment:'center', margin:[0,0,0,10] },
+    { text:data.adresse, style:'h2', alignment:'center' }
+  ];
+
+  const toc = { toc:{ title:{ text:'Sommaire', style:'h2' } }, pageBreak:'after' };
+  const content=[ { stack:cover, margin:[0,20,0,20], pageBreak:'after' }, toc ];
+
+  // Adresse & situation: carte statique (si clé), puis photo façade
+  content.push({ tocItem:true, text:'Adresse & situation', style:'h2' });
+  let mapImg=null;
+  if(data.mapKey){ mapImg = await getStaticMapDataUrl(data.adresse, data.mapProvider, data.mapKey); }
+  if(mapImg){ content.push({ image:mapImg, width:500, margin:[0,4,0,8] }); }
+  if(data.facadeDataUrl){ content.push({ image:data.facadeDataUrl, width:500, margin:[0,0,0,10] }); }
+
+  // Disclaimer premium AVANT descriptif
+  const det = data.details||{};
+  if(det.disclaimer){ content.push(styleDisclaimer(det.disclaimer)); }
+
+  // Détail du bien
+  content.push({ text:'Détail du bien', style:'h2' });
+  content.push({ table:{ widths:['*','*','*'], body:[
+    [ {text:`Type : ${det.d_type||''}`}, {text:`Étage/Asc. : ${det.d_etage||''}`}, {text:`Année : ${det.d_annee||''}`} ],
+    [ {text:`DPE/GES : ${det.d_dpe||''}`}, {text:`Chauffage : ${det.d_chauffage||''}`}, {text:`Copro/Charges : ${det.d_copro||''}`} ]
+  ] }, layout:'lightHorizontalLines', margin:[0,2,0,8] });
+
+  // Descriptif général
+  if(data.descGeneral){ content.push({ tocItem:true, text:'Descriptif général', style:'h2' }); content.push({ text:data.descGeneral, margin:[0,4,0,8]}); }
+
+  // Pièces avec critères + photos + note calculée
+  let globalScores=[];
+  (data.rooms||[]).filter(r=>r && (r.name||r.desc||(r.photos||[]).length)).forEach((r,i)=>{
+    content.push({ tocItem:true, text:`${r.name? r.name : 'Pièce ' + (i+1)}${(typeof r.score==='number' && !isNaN(r.score))? ` – ${r.score}/5`:''}`, style:'h2' });
+    if(r.desc) content.push({ text:r.desc, margin:[0,2,0,6] });
+
+    if(r.c && r.c.length){
+      content.push({ text:'Critères cochés :', style:'note' });
+      content.push({ ul: r.c.map(x=>({text:x})), margin:[0,0,0,6] });
+    }
+
+    // photos 2 colonnes
+    const photos=(r.photos||[]).slice(0,20).map(src=>({ image:src, width:180, margin:[0,0,8,8] }));
+    if(photos.length){
+      const rows=[]; for(let k=0;k<photos.length;k+=2){ rows.push([photos[k], photos[k+1]||{text:''}]) }
+      content.push({ table:{ widths:['*','*'], body:rows }, layout:'noBorders' });
+    }
+
+    // moyenne auto
+    let avg = (typeof r.score==='number' && !isNaN(r.score)) ? r.score : null;
+    if(avg==null && r.c){ const denom=8; avg = Math.round((r.c.length/denom)*5*10)/10; }
+    if(avg!=null){ globalScores.push(avg); content.push({ text:`Note calculée : ${avg}/5`, style:'note', margin:[0,4,0,0] }); }
+
+    content.push({ text:'\n' });
+  });
+
+  // Synthèse globale
+  if(globalScores.length){
+    const g = Math.round((globalScores.reduce((a,b)=>a+b,0)/globalScores.length)*10)/10;
+    content.push({ text:`Synthèse : score global ${g}/5`, style:'h2' });
+  }
+
+  // Signature
+  content.push({ text:'\n' });
+  content.push({ table:{ widths:['*','*'], body:[
+    [ {text:'Fait le : ' + new Date().toLocaleDateString('fr-FR')}, {text:'Signature : __________________________', alignment:'right'} ]
+  ] }, layout:'noBorders' });
+
+  // doc definition
+  const dd={
+    pageSize:'A4', pageMargins:[32,36,32,40],
+    footer:(currentPage,pageCount)=>({
+      columns:[
+        (window.__logoSmall ? { image: window.__logoSmall, width:40, margin:[24,0,0,0] } : { text:'' }),
+        { text:`Page ${currentPage} / ${pageCount} • ${new Date().toLocaleDateString('fr-FR')}`, alignment:'right', color:'#6b7280' }
+      ],
+      margin:[24,0,24,12]
+    }),
+    content,
+    styles:{
+      coverTitle:{ fontSize:24, bold:true },
+      coverSubtitle:{ fontSize:16, color:'#111' },
+      h2:{ fontSize:14, bold:true, color:'#111' },
+      note:{ fontSize:10, color:'#6b7280' },
+      meta:{ fontSize:10, color:'#6b7280' }
+    }, defaultStyle:{ fontSize:11, lineHeight:1.25 }
+  };
+
+  // logo pour pied de page
+  window.__logoSmall = data.logoDataUrl || null;
+
+  pdfMake.createPdf(dd).download(`${sanitizeFilename(data.titre)}.pdf`);
+  toast('PDF généré');
+});
+
+function sanitizeFilename(s){ return (s||'rapport').replace(/[^a-z0-9\-_. ]/gi,'_').slice(0,120); }
 </script>
 </body>
 </html>
